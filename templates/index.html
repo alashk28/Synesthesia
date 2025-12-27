@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="data:,">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synesthesia - Tu Experiencia Musical</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }
+        .card-glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .mood-card, .movie-card { transition: all 0.3s ease; cursor: pointer; }
+        .mood-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+        .movie-card:hover { transform: scale(1.02); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+        .progress-bar { background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
+        .spotify-green { background-color: #1DB954; }
+        .spotify-green:hover { background-color: #1ed760; }
+        
+        /* Modal styles */
+        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+        .modal-content { background: linear-gradient(135deg, #1a1a2e, #16213e); margin: 5% auto; padding: 0; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto; position: relative; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; position: absolute; top: 15px; right: 20px; cursor: pointer; z-index: 10; }
+        .close:hover { color: #fff; }
+        .modal-image { width: 100%; height: 300px; object-fit: cover; border-radius: 16px 16px 0 0; }
+        .modal-body { padding: 24px; }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    
+    {% if not logged_in %}
+    <div class="container mx-auto px-4 py-20 text-center">
+        <h1 class="text-6xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">
+            Synesthesia
+        </h1>
+        <p class="text-xl text-gray-300 mb-12 max-w-2xl mx-auto">
+            Descubre tu estado de ánimo a través de tu música y recibe recomendaciones de películas personalizadas basadas en tus géneros favoritos.
+        </p>
+        
+        <a href="/login" class="spotify-green text-white font-bold py-4 px-10 rounded-full text-lg inline-flex items-center gap-3 transition-all transform hover:scale-105 shadow-lg hover:shadow-green-500/30">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+            </svg>
+            Iniciar Sesión con Spotify
+        </a>
+        
+        <div class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div class="card-glass rounded-xl p-8">
+                <div class="text-4xl mb-4">🎵</div>
+                <h3 class="text-xl font-bold mb-2">Análisis de tu Música</h3>
+                <p class="text-gray-400">Explora los detalles de audio de tus canciones favoritas.</p>
+            </div>
+            <div class="card-glass rounded-xl p-8">
+                <div class="text-4xl mb-4">🎬</div>
+                <h3 class="text-xl font-bold mb-2">Recomendaciones</h3>
+                <p class="text-gray-400">Películas seleccionadas para cada uno de tus géneros.</p>
+            </div>
+            <div class="card-glass rounded-xl p-8">
+                <div class="text-4xl mb-4">💡</div>
+                <h3 class="text-xl font-bold mb-2">Conexión Cultural</h3>
+                <p class="text-gray-400">Descubre cómo tu música se refleja en el cine.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div id="movieModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <img id="modalImage" class="modal-image" src="https://via.placeholder.com/800x400/1a1a2e/ffffff?text=Cargando..." alt="Poster">
+            <div class="modal-body">
+                <h2 id="modalTitle" class="text-3xl font-bold mb-2 text-white"></h2>
+                <div class="flex items-center gap-4 mb-4">
+                    <span id="modalYear" class="bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full text-sm"></span>
+                    <span id="modalGenre" class="bg-pink-500/20 text-pink-300 px-3 py-1 rounded-full text-sm capitalize"></span>
+                    <span id="modalRating" class="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-sm"></span>
+                </div>
+                <p id="modalFullDesc" class="text-gray-300 mb-6 leading-relaxed"></p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white/5 rounded-lg p-4">
+                        <h4 class="text-purple-400 font-semibold mb-2">🎬 Director</h4>
+                        <p id="modalDirector" class="text-white"></p>
+                    </div>
+                    <div class="bg-white/5 rounded-lg p-4">
+                        <h4 class="text-yellow-400 font-semibold mb-2">🏆 Premios</h4>
+                        <p id="modalAwards" class="text-white"></p>
+                    </div>
+                </div>
+                
+                <div class="bg-white/5 rounded-lg p-4">
+                    <h4 class="text-pink-400 font-semibold mb-2">🎭 Reparto Principal</h4>
+                    <p id="modalCast" class="text-white"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if logged_in %}
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-12">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-2xl">
+                    🎵
+                </div>
+                <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">
+                    Synesthesia
+                </h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-gray-400">Hola, <span class="text-white font-medium">{{ user_name }}</span></span>
+                <a href="/" class="text-sm text-gray-400 hover:text-white transition-colors">Cerrar Sesión</a>
+            </div>
+        </header>
+        
+        {% if api_error %}
+        <div class="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-6 mb-8">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl">⚠️</span>
+                <div>
+                    <h3 class="text-xl font-bold text-yellow-400">Análisis limitado</h3>
+                    <p class="text-gray-300">
+                        Spotify ha limitado el acceso a cierta API. Hemos usado valores estimados para el análisis. Tus recomendaciones de películas siguen basándose en tus géneros favoritos.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <section class="card-glass rounded-2xl p-8 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="text-3xl">✨</span>
+                Tu Estado de Ánimo Principal
+            </h2>
+            <div class="flex flex-col md:flex-row items-center gap-8">
+                <div class="text-center">
+                    <div class="w-48 h-48 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-4 mx-auto">
+                        <span class="text-6xl font-bold">{{ mood_name.split()[0][:3] }}</span>
+                    </div>
+                    <h3 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                        {{ mood_name }}
+                    </h3>
+                </div>
+                <div class="flex-1 w-full">
+                    <h4 class="text-lg font-medium mb-4 text-gray-300">Intensidad de cada emoción:</h4>
+                    <div class="space-y-3">
+                        {% for mood, score in mood_scores.items() %}
+                        <div class="flex items-center gap-4">
+                            <span class="w-32 text-sm capitalize text-gray-400">{{ mood.replace('_', ' ') }}</span>
+                            <div class="flex-1 h-3 bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full progress-bar" style="width: {{ score }}%"></div>
+                            </div>
+                            <span class="w-12 text-right text-sm text-gray-400">{{ "%.1f"|format(score) }}%</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="card-glass rounded-2xl p-8 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="text-3xl">📊</span>
+                Análisis de Audio Detallado
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                {% for feature, value in audio_analysis.items() %}
+                <div class="bg-white/5 rounded-xl p-4 text-center">
+                    <div class="text-3xl mb-2">
+                        {% if feature == 'acousticness' %}🎸
+                        {% elif feature == 'danceability' %}💃
+                        {% elif feature == 'energy' %}⚡
+                        {% elif feature == 'speechiness' %}🎤
+                        {% elif feature == 'valence' %}😊
+                        {% elif feature == 'tempo' %}⏱️
+                        {% elif feature == 'instrumentalness' %}🎹
+                        {% else %}📈{% endif %}
+                    </div>
+                    <h4 class="text-sm text-gray-400 capitalize mb-1">{{ feature }}</h4>
+                    <span class="text-xl font-bold text-purple-400">{{ value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        {% if top_genres %}
+        <section class="card-glass rounded-2xl p-8 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                <span class="text-3xl">🏆</span>
+                Tus 5 Géneros Principales
+            </h2>
+            <div class="flex flex-wrap gap-3">
+                {% for genre in top_genres %}
+                <span class="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-full px-6 py-2 text-lg capitalize">
+                    {{ genre }}
+                </span>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        
+        {% if movie_recommendations %}
+        <section>
+            <h2 class="text-2xl font-bold mb-8 flex items-center gap-3">
+                <span class="text-3xl">🎬</span>
+                Recomendaciones de Películas
+            </h2>
+            
+            {% for genre, movies in movie_recommendations.items() %}
+            <div class="mb-12">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2 capitalize">
+                    <span class="text-purple-400">#{{ loop.index }}</span>
+                    {{ genre }}
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                    {% for movie in movies %}
+                    <div class="card-glass rounded-xl overflow-hidden movie-card" 
+                         onclick="openModal('{{ movie.image }}', '{{ movie.title|replace('\'', '\\\'') }}', '{{ movie.year }}', '{{ movie.genre }}', '{{ movie.rating }}', '{{ movie.full_synopsis|replace('\'', '\\\'') }}', '{{ movie.director|replace('\'', '\\\'') }}', '{{ movie.awards|replace('\'', '\\\'') }}', '{{ movie.cast|join(', ')|replace('\'', '\\\'') }}')">
+                        <div class="aspect-[2/3] relative overflow-hidden">
+                            <img src="{{ movie.image if movie.image else 'https://via.placeholder.com/300x450/1a1a2e/ffffff?text=' + movie.title|replace(' ', '+') }}" 
+                                 alt="{{ movie.title }}" 
+                                 class="w-full h-full object-cover"
+                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/300x450/1a1a2e/ffffff?text=Error';">
+                        </div>
+                        <div class="p-4">
+                            <h4 class="font-bold text-lg mb-1 truncate">{{ movie.title }}</h4>
+                            <p class="text-sm text-gray-400 mb-2">{{ movie.year }}</p>
+                            <p class="text-sm text-gray-300 line-clamp-2">{{ movie.short_desc }}</p>
+                            <div class="mt-2 flex items-center gap-2">
+                                <span class="text-yellow-400">⭐</span>
+                                <span class="text-sm text-gray-300">{{ movie.rating }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+        
+        <footer class="text-center text-gray-500 py-8 mt-12 border-t border-white/10">
+            <p>Desarrollado con ❤️ usando Flask, Spotipy y Tailwind CSS</p>
+        </footer>
+    </div>
+    {% endif %}
+    
+    <script>
+        function openModal(image, title, year, genre, rating, fullDesc, director, awards, cast) {
+            const modal = document.getElementById('movieModal');
+            
+            // Si la imagen viene vacía al hacer clic, usar un placeholder
+            const finalImage = image ? image : 'https://via.placeholder.com/800x400/1a1a2e/ffffff?text=Sin+Imagen';
+            
+            document.getElementById('modalImage').src = finalImage;
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalYear').textContent = year;
+            document.getElementById('modalGenre').textContent = genre;
+            document.getElementById('modalRating').textContent = '⭐ ' + rating + '/10';
+            document.getElementById('modalFullDesc').textContent = fullDesc;
+            document.getElementById('modalDirector').textContent = director;
+            document.getElementById('modalAwards').textContent = awards;
+            document.getElementById('modalCast').textContent = cast;
+            
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            document.getElementById('movieModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+            // Limpiar src al cerrar para evitar descargas innecesarias
+            document.getElementById('modalImage').src = "https://via.placeholder.com/800x400/1a1a2e/ffffff?text=Cargando...";
+        }
+        
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modal = document.getElementById('movieModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+        
+        // Cerrar modal con ESC
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
