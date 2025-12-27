@@ -26,7 +26,7 @@ SPOTIPY_REDIRECT_URI = os.getenv('SPOTIPY_REDIRECT_URI')
 if not all([SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI]):
     raise ValueError("Error: Faltan variables de entorno. Asegúrate de tener SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET y SPOTIPY_REDIRECT_URI en tu archivo .env")
 
-app.secret_key = os.urandom(24)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'una_clave_super_secreta_y_fija_12345')
 
 # Base de datos de películas completa
 MOVIE_DATABASE = {
