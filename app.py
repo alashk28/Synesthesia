@@ -98,16 +98,28 @@ def get_top_genres(sp):
         return ["Pop"]
 
 def get_audio_analysis(sp):
-    """Analisis con manejo de errores 403"""
+    """
+    Intenta obtener audio features. 
+    Si falla (Error 403), CALCULA los valores basándose en los géneros del usuario.
+    """
     try:
-        top_tracks = sp.current_user_top_tracks(limit=10, time_range='short_term')
+        # 1. Intentamos la vía oficial primero
+        # IMPORTANTE: Usamos medium_term para tener más probabilidad de encontrar datos
+        top_tracks = sp.current_user_top_tracks(limit=10, time_range='medium_term')
         track_ids = [t['id'] for t in top_tracks['items'] if t and t.get('id')]
         
-        if not track_ids: return {}, {}
+        if not track_ids: 
+            # Si no hay canciones, forzamos el error para ir al plan B
+            raise Exception("Sin canciones suficientes")
 
-        # Aquí es donde fallaba. Con el nuevo SCOPE debería funcionar.
+        # Intentamos pedir los datos a Spotify
         audio_features = sp.audio_features(track_ids)
         
+        # Si devuelve lista vacía o con Nones (bloqueo), lanzamos error para activar el Plan B
+        if not audio_features or audio_features[0] is None:
+            raise Exception("Spotify Bloqueo 403 detectado")
+
+        # --- CÁLCULO REAL (Si Spotify funcionara) ---
         avg = {'danceability': 0, 'energy': 0, 'valence': 0, 'acousticness': 0}
         count = 0
         for f in audio_features:
@@ -120,7 +132,7 @@ def get_audio_analysis(sp):
         
         if count > 0:
             for key in avg: avg[key] = round(avg[key] / count, 2)
-
+            
         mood_scores = {
             'Positividad': int(avg['valence'] * 100),
             'Energía': int(avg['energy'] * 100),
@@ -130,10 +142,47 @@ def get_audio_analysis(sp):
         return mood_scores, avg
 
     except Exception as e:
-        # Si sigue fallando, imprimimos el error pero no rompemos la app
-        logger.error(f"Error INTENSIDAD (Audio Features): {e}")
-        return {}, {}
+        logger.warning(f"⚠️ Usando Inferencia por Géneros debido a: {e}")
+        
+        # --- PLAN B: ESTIMACIÓN INTELIGENTE BASADA EN GÉNEROS ---
+        # 1. Obtenemos los géneros que ya calculaste antes
+        user_genres = get_top_genres(sp)
+        
+        # 2. Valores base (un punto medio estándar)
+        est = {'danceability': 0.5, 'energy': 0.6, 'valence': 0.6, 'acousticness': 0.3}
+        
+        # 3. Ajustamos según lo que escucha el usuario
+        # Convertimos la lista de géneros a texto para buscar palabras clave
+        genres_text = " ".join(user_genres).lower()
+        
+        # Reglas de inferencia
+        if any(x in genres_text for x in ['metal', 'rock', 'punk', 'hard']):
+            est['energy'] = min(0.95, est['energy'] + 0.3)
+            est['acousticness'] = max(0.05, est['acousticness'] - 0.2)
+            
+        if any(x in genres_text for x in ['pop', 'dance', 'reggaeton', 'hip hop', 'urbano', 'latino']):
+            est['danceability'] = min(0.95, est['danceability'] + 0.3)
+            est['energy'] = min(0.95, est['energy'] + 0.2)
+            est['valence'] = min(0.95, est['valence'] + 0.2)
+            
+        if any(x in genres_text for x in ['jazz', 'classical', 'folk', 'indie', 'acoustic', 'piano', 'ambient']):
+            est['acousticness'] = min(0.95, est['acousticness'] + 0.4)
+            est['energy'] = max(0.2, est['energy'] - 0.2)
+            est['danceability'] = max(0.2, est['danceability'] - 0.1)
 
+        if any(x in genres_text for x in ['sad', 'blues', 'melancholy', 'bolero']):
+            est['valence'] = max(0.2, est['valence'] - 0.3)
+            est['acousticness'] = min(0.9, est['acousticness'] + 0.2)
+
+        # 4. Formateamos para devolver
+        simulated_scores = {
+            'Positividad': int(est['valence'] * 100),
+            'Energía': int(est['energy'] * 100),
+            'Ritmo': int(est['danceability'] * 100),
+            'Acústico': int(est['acousticness'] * 100)
+        }
+        
+        return simulated_scores, est
 # --- 6. RUTAS ---
 
 @app.route('/')
