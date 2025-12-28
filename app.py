@@ -22,7 +22,7 @@ SPOTIPY_REDIRECT_URI = os.getenv('SPOTIPY_REDIRECT_URI')
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
 if not all([SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI, TMDB_API_KEY]):
-    raise ValueError("Faltan variables en el .env. Revisa el archivo.")
+    raise ValueError("Faltan variables en el .env.")
 
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'clave_segura_123')
 
@@ -54,7 +54,7 @@ def get_movies_from_tmdb(genre_name):
             "with_genres": tmdb_genre_ids,
             "vote_count.gte": 200
         }
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=5) # Timeout para que no se cuelgue
         data = response.json()
         movies = []
         if "results" in data:
@@ -72,20 +72,23 @@ def get_movies_from_tmdb(genre_name):
         logger.error(f"Error conectando a TMDB: {e}")
         return []
 
-# --- FUNCIONES DE SPOTIFY (GÉNEROS) ---
+# --- FUNCIONES DE SPOTIFY ---
 def get_genres_from_artists(sp, artist_ids):
     genres = []
-    for artist_id in artist_ids:
+    # Procesamos en lotes pequeños para evitar errores
+    for i in range(0, len(artist_ids), 50):
+        batch = artist_ids[i:i+50]
         try:
-            artist = sp.artist(artist_id)
-            genres.extend(artist['genres'])
+            artists_full = sp.artists(batch) # Llamada eficiente en lote
+            for artist in artists_full['artists']:
+                if artist:
+                    genres.extend(artist['genres'])
         except Exception as e:
-            logger.warning(f"Error artista {artist_id}: {e}")
+            logger.warning(f"Error recuperando artistas: {e}")
     return genres
 
 def get_top_genres(sp):
     try:
-        # Usamos Top Artists para definir los géneros
         results = sp.current_user_top_artists(limit=50, time_range='medium_term')
         artist_ids = [item['id'] for item in results['items']]
         all_genres = get_genres_from_artists(sp, artist_ids)
@@ -108,29 +111,33 @@ def get_top_genres(sp):
         logger.error(f"Error géneros: {e}")
         return ["Pop"]
 
-# --- FUNCIONES DE ANÁLISIS DE AUDIO (REACTIVADO) ---
 def get_audio_analysis(sp):
-    """Analiza las canciones para sacar la intensidad y datos numéricos"""
+    """VERSIÓN BLINDADA: Si falla, devuelve ceros pero NO rompe la app"""
     try:
-        # Usamos Top Tracks para el análisis numérico
         top_tracks = sp.current_user_top_tracks(limit=20, time_range='short_term')
-        if not top_tracks['items']:
+        
+        # Filtramos canciones que no tengan ID (archivos locales)
+        track_ids = []
+        if top_tracks and 'items' in top_tracks:
+            for t in top_tracks['items']:
+                if t and t.get('id'): # Solo si tiene ID válido
+                    track_ids.append(t['id'])
+        
+        if not track_ids:
             return {}, {}
 
-        track_ids = [t['id'] for t in top_tracks['items']]
-        audio_features = sp.audio_features(track_ids)
+        # Intentamos obtener audio features
+        try:
+            audio_features = sp.audio_features(track_ids)
+        except Exception as e:
+            logger.error(f"Error interno de Spotify (Audio Features): {e}")
+            return {}, {} # Si falla aquí, devolvemos vacío y seguimos
         
-        # Calcular promedios
-        avg_features = {
-            'danceability': 0,
-            'energy': 0,
-            'valence': 0, # Felicidad/Positividad
-            'acousticness': 0
-        }
-        
+        avg_features = {'danceability': 0, 'energy': 0, 'valence': 0, 'acousticness': 0}
         count = 0
+        
         for f in audio_features:
-            if f: # A veces Spotify devuelve None
+            if f: # Verificamos que no sea None
                 avg_features['danceability'] += f['danceability']
                 avg_features['energy'] += f['energy']
                 avg_features['valence'] += f['valence']
@@ -141,27 +148,18 @@ def get_audio_analysis(sp):
             for key in avg_features:
                 avg_features[key] = round(avg_features[key] / count, 2)
 
-        # Preparar datos para "Intensidad" (Mood Scores)
         mood_scores = {
             'Positividad': int(avg_features['valence'] * 100),
             'Energía': int(avg_features['energy'] * 100),
             'Ritmo': int(avg_features['danceability'] * 100),
             'Acústico': int(avg_features['acousticness'] * 100)
         }
-        
         return mood_scores, avg_features
 
     except Exception as e:
-        logger.error(f"Error en análisis de audio: {e}")
-        return {}, {}
-
-def get_movie_recommendations(user_genres):
-    recommendations = {}
-    for genre in user_genres:
-        movies = get_movies_from_tmdb(genre)
-        if movies:
-            recommendations[genre] = movies
-    return recommendations
+        logger.error(f"Error GENERAL en análisis de audio: {e}")
+        # Retorno de emergencia para que la app cargue sí o sí
+        return {}, {} 
 
 # --- RUTAS ---
 @app.route('/')
@@ -171,8 +169,14 @@ def index():
 @app.route('/login')
 def login():
     cache_handler = FlaskSessionCacheHandler(session)
-    sp_oauth = SpotifyOAuth(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET, redirect_uri=SPOTIPY_REDIRECT_URI, scope='user-top-read', cache_handler=cache_handler)
+    # Agregamos show_dialog=True para forzar que te pregunte cuenta si es necesario
+    sp_oauth = SpotifyOAuth(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET, redirect_uri=SPOTIPY_REDIRECT_URI, scope='user-top-read', cache_handler=cache_handler, show_dialog=True)
     return redirect(sp_oauth.get_authorize_url())
+
+@app.route('/logout')
+def logout():
+    session.clear() # Borra la sesión de la app
+    return redirect(url_for('index'))
 
 @app.route('/callback')
 def callback():
@@ -188,16 +192,10 @@ def callback():
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         user = sp.current_user()
         
-        # 1. Obtener Géneros (para películas)
         top_genres = get_top_genres(sp)
-        
-        # 2. Obtener Películas (API TMDB)
         movie_recommendations = get_movie_recommendations(top_genres)
+        mood_scores, audio_analysis = get_audio_analysis(sp) # Ahora esta función nunca falla
         
-        # 3. Obtener Análisis de Audio (RESTAURADO)
-        mood_scores, audio_analysis = get_audio_analysis(sp)
-        
-        # Definir un nombre de Mood basado en la energía
         mood_name = "Oyente Equilibrado"
         if mood_scores.get('Energía', 0) > 75:
             mood_name = "Explosión de Energía"
@@ -209,8 +207,8 @@ def callback():
         return render_template('index.html', 
                                logged_in=True, 
                                mood_name=mood_name, 
-                               mood_scores=mood_scores,      # Ahora sí enviamos datos reales
-                               audio_analysis=audio_analysis, # Ahora sí enviamos datos reales
+                               mood_scores=mood_scores,
+                               audio_analysis=audio_analysis,
                                movie_recommendations=movie_recommendations, 
                                top_genres=top_genres, 
                                user_name=user['display_name'])
