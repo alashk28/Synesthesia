@@ -65,6 +65,8 @@ if not all([SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI]):
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'una_clave_super_secreta_y_fija_12345')
 
 # Base de datos de películas completa
+from typing import List, Dict
+
 MOVIE_DATABASE = {
     "Pop": [
         {"id": "pop_001", "title": "A Star Is Born", "year": 2018, "image": None, "short_desc": "Una cantante emergente se enamora de un músico legendario.", "full_synopsis": "En esta nueva adaptación de la legendaria historia de amor, Bradley Cooper dirige y protagoniza junto a Lady Gaga. Jackson Maine, un músico en la cima de su carrera, descubre a Ally, una artista que lucha por hacerse un nombre. Cuando la carrera de ella despega, la relación personal se vuelve más complicada.", "director": "Bradley Cooper", "cast": ["Bradley Cooper", "Lady Gaga", "Andrew Dice Clay", "Dave Chappelle"], "awards": "Ganó 1 Oscar - Mejor Canción Original", "rating": 7.6, "genre": "Pop"},
@@ -88,7 +90,7 @@ MOVIE_DATABASE = {
         {"id": "rock_007", "title": "Ray", "year": 2004, "image": None, "short_desc": "La vida de Ray Charles.", "full_synopsis": "La historia del legendario músico Ray Charles, desde su infancia ciega en el sur de Estados Unidos, pasando por su rise a la fama y su influencia revolucionaria en la música soul, R&B y jazz.", "director": "Taylor Hackford", "cast": ["Jamie Foxx", "Kerry Washington", "Regina King", "Clifton Powell"], "awards": "Ganó 2 Oscars - Mejor Actor, Sonido", "rating": 7.7, "genre": "Rock"},
         {"id": "rock_008", "title": "Control", "year": 2007, "image": None, "short_desc": "La vida de Ian Curtis de Joy Division.", "full_synopsis": "La biografía de Ian Curtis, el carismático líder de la banda Joy Division, desde sus beginnings en Manchester hasta la creación de algunas de las canciones más influyentes de la música post-punk, luchando contra la epilepsia y su matrimonio fallido.", "director": "Anton Corbijn", "cast": ["Sam Riley", "Samantha Morton", "Alexis Drake", "Joe Anderson"], "awards": "Ganó 1 BAFTA - Mejor Dirección de Fotografía", "rating": 7.6, "genre": "Rock"},
         {"id": "rock_009", "title": "Backdraft", "year": 1991, "image": None, "short_desc": "Dos hermanos bomberos con una rivalidad.", "full_synopsis": "Stephen es un bombero que investiga una serie de incendios sospechosos que podrían estar relacionados con el asesinato de su hermano mayor. La investigación lo lleva a descubrir una conspiración dentro del departamento de bomberos.", "director": "Ron Howard", "cast": ["Kurt Russell", "William Baldwin", "Robert De Niro", "Jennifer Jason Leigh"], "awards": "Ganó 1 Oscar - Mejor Efectos de Sonido", "rating": 6.7, "genre": "Rock"},
-        {"id": "rock_010", "title": "Hedwig and the Angry Inch", "year": 2001, "image": None, "short_desc": "La historia de un rocker独一无二的.", "full_synopsis": "Hedwig, una niña alemana del Este, se somete a una cirugía de cambio de sexo fallida y posteriormente forma una banda. Su relación con Tommy Gnosis, su protegida que se convierte en estrella, forma el corazón de esta historia sobre identidad y amor.", "director": "John Cameron Mitchell", "cast": ["John Cameron Mitchell", "Miriam Shor", "Tuesday", "Stephen Trask"], "awards": "Ganó 1 Oscar - Mejor Canción Original", "rating": 7.7, "genre": "Rock"}
+        {"id": "rock_010", "title": "Hedwig and the Angry Inch", "year": 2001, "image": None, "short_desc": "La historia de un rocker", "full_synopsis": "Hedwig, una niña alemana del Este, se somete a una cirugía de cambio de sexo fallida y posteriormente forma una banda. Su relación con Tommy Gnosis, su protegida que se convierte en estrella, forma el corazón de esta historia sobre identidad y amor.", "director": "John Cameron Mitchell", "cast": ["John Cameron Mitchell", "Miriam Shor", "Tuesday", "Stephen Trask"], "awards": "Ganó 1 Oscar - Mejor Canción Original", "rating": 7.7, "genre": "Rock"}
     ],
     "Hip-Hop": [
         {"id": "hh_001", "title": "8 Mile", "year": 2002, "image": None, "short_desc": "Un rapper de Detroit sueña con fama.", "full_synopsis": "Rabbit, un joven rapper blanco de Detroit, lucha contra sus circunstancias personales y económicas. Cuando obtiene la oportunidad de competir en una batalla de rap contra los mejores MCs de la ciudad, debe superar sus miedos y demostrar su valía.", "director": "Curtis Hanson", "cast": ["Eminem", "Brittany Murphy", "Mekhi Phifer", "Kim Basinger"], "awards": "Ganó 1 Oscar - Mejor Canción Original", "rating": 7.4, "genre": "Hip-Hop"},
@@ -121,9 +123,9 @@ MOVIE_DATABASE = {
         {"id": "rnb_004", "title": "Brown Sugar", "year": 2002, "image": None, "short_desc": "Una periodista y un productor de discos.", "full_synopsis": "Dre y Sidney han sido mejores amigos desde la secundaria. Dre es un productor de discos y Sidney es una periodista musical. Cuando Dre se compromete con otra persona, Sidney debe admitir sus sentimientos por él.", "director": "Rick Famuyiwa", "cast": ["Sanaa Lathan", "Taye Diggs", "Boris Kodjoe", "Queen Latifah"], "awards": "Nominado a 1 NAACP Image Award", "rating": 6.3, "genre": "R&B"},
         {"id": "rnb_005", "title": "Roll Bounce", "year": 2005, "image": None, "short_desc": "Adolescentes en batallas de patinaje.", "full_synopsis": "En los años 70, un grupo de adolescentes afroamericanos en el South Side de Chicagocompiten en batallas de patinaje. El protagonista debe decidir entre su amor por el patinaje y las expectativas de su padre.", "director": "Sanaa Lathan", "cast": ["Bow Wow", "Bresha Webb", "Meagan Good", "Wesley Snipes"], "awards": "Nominado a 1 Image Award", "rating": 5.8, "genre": "R&B"},
         {"id": "rnb_006", "title": "Crazy/Beautiful", "year": 2001, "image": None, "short_desc": "Historia de amor entre diferentes clases sociales.", "full_synopsis": "Nicole, una estudiante de preparatoria de clase alta, se enamora de Carlos, un joven de un vecindario humilde. Su relación es approveada por sus familias y la comunidad, pero juntos descubren que el amor puede superar cualquier barrera.", "director": "John Singleton", "cast": ["Khalid", "Kylie", "Michael", "Lisa"], "awards": "Estreno de televisión", "rating": 5.4, "genre": "R&B"},
-        {"id": "rnb_007", "title": "The Way You Move", "year": 2024, "image": None, "short_desc": "Un bailarín profesional debe elegir.", "full_synopsis": "Un bailarín profesional de éxito enfrenta el dilema de elegir entre su carrera en Nueva York y el amor en Atlanta. Una historia sobre sacrifice y pasión por el arte.", "director": "Nneka Egbu", "cast": ["David", "Sarah", "Michael", "Angela"], "awards": "Próximo estreno", "rating": "N/A", "genre": "R&B"},
+        {"id": "rnb_007", "title": "The Way You Move", "year": 2024, "image": None, "short_desc": "Un bailarín profesional debe elegir.", "full_synopsis": "Un bailarín profesional de éxito enfrenta el dilema de elegir entre su carrera en Nueva York y el amor en Atlanta. Una historia sobre sacrifice y pasión por el arte.", "director": "Nneka Egbu", "cast": ["David", "Sarah", "Michael", "Angela"], "awards": "Próximo estreno", "rating": "5.7", "genre": "R&B"},
         {"id": "rnb_008", "title": "Jumping the Broom", "year": 2011, "image": None, "short_desc": "Dos familias en la boda de sus hijos.", "full_synopsis": "Una boda entre una pareja de diferentes clases sociales reúne a sus familias en Martha's Vineyard. Las diferencias culturales y de clase crean tensiones cómicas mientras los novios intentan unite a sus familias.", "director": "Albert Allen", "cast": ["Angela Bassett", "Loretta Devine", "Paula Patton", "Laz Alonso"], "awards": "Nominado a 2 NAACP Image Awards", "rating": 6.2, "genre": "R&B"},
-        {"id": "rnb_009", "title": "Phat Girlz", "year": 2006, "image": None, "short_desc": "Mujeres plus-size en Hollywood.", "full_synopsis": "Dos amigas plus-size en Hollywood enfrentan los desafíos de autoestima, amor y aceptación mientras persigueen sus sueños en una industria que no está diseñada para ellas.", "director": "Nneka Onuorah", "cast": ["Kym Whitley", "Jimmy Jean-Louis", "Mo'Nique", "Floyd Walker"], "awards": "Ganó 1 Image Award"}
+        {"id": "rnb_009", "title": "Phat Girlz", "year": 2006, "image": None, "short_desc": "Mujeres plus-size en Hollywood.", "full_synopsis": "Dos amigas plus-size en Hollywood enfrentan los desafíos de autoestima, amor y aceptación mientras persigueen sus sueños en una industria que no está diseñada para ellas.", "director": "Nneka Onuorah", "cast": ["Kym Whitley", "Jimmy Jean-Louis", "Mo'Nique", "Floyd Walker"], "awards": "Ganó 1 Image Award", "rating":6.8, "genre": "R&B"}
     ],
     "K-Pop": [
         {"id": "kpop_001", "title": "Blackpink: Light Up the Sky", "year": 2020, "image": None, "short_desc": "Documental sobre el fenómeno global BLACKPINK.","full_synopsis": "Sigue el ascenso meteórico de BLACKPINK desde sus días como trainees hasta convertirse en uno de los grupos femeninos más influyentes del mundo.", "director": "Caroline Suh", "cast": ["BLACKPINK"], "awards": "Documental de Netflix", "rating": 7.5, "genre": "K-Pop"},
@@ -173,33 +175,30 @@ MOVIE_DATABASE = {k.lower(): v for k, v in MOVIE_DATABASE.items()} # type: ignor
 
 def classify_mood(acousticness, danceability, energy, speechiness, valence, tempo):
     scores = {
-        'happy': 0, 'sad': 0, 'energetic': 0, 'calm': 0, 'tense': 0,
-        'romantic': 0, 'nostalgic': 0, 'confident': 0, 'melancholic': 0,
-        'euphoric': 0, 'bored': 0, 'aggressive': 0, 'dreamy': 0,
-        'mysterious': 0, 'playful': 0
+        'happy': (valence * 0.4) + (energy * 0.3) + (danceability * 0.3),
+        'sad': ((1 - valence) * 0.4) + ((1 - energy) * 0.3) + (acousticness * 0.2),
+        'energetic': (energy * 0.4) + (tempo / 200 * 0.3) + (danceability * 0.3),
+        'calm': ((1 - energy) * 0.4) + (acousticness * 0.3) + ((1 - speechiness) * 0.2),
+        'tense': ((1 - danceability) * 0.3) + ((1 - valence) * 0.3) + (energy * 0.3),
+        'romantic': (valence * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.2),
+        'nostalgic': (acousticness * 0.5) + ((1 - energy) * 0.3) + (valence * 0.2),
+        'confident': (energy * 0.4) + (valence * 0.3) + (danceability * 0.3),
+        'melancholic': (acousticness * 0.3) + ((1 - valence) * 0.4) + ((1 - energy) * 0.3),
+        'euphoric': (energy * 0.35) + (valence * 0.35) + (danceability * 0.3),
+        'bored': ((1 - energy) * 0.4) + ((1 - valence) * 0.3) + ((1 - danceability) * 0.3),
+        'aggressive': (energy * 0.4) + (speechiness * 0.3) + ((1 - acousticness) * 0.3),
+        'dreamy': (acousticness * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.3),
+        'mysterious': (acousticness * 0.4) + ((1 - speechiness) * 0.3) + ((1 - valence) * 0.2),
+        'playful': (danceability * 0.4) + (valence * 0.3) + (energy * 0.3)
     }
-
-    scores['happy'] = (valence * 0.4) + (energy * 0.3) + (danceability * 0.3)
-    scores['sad'] = ((1 - valence) * 0.4) + ((1 - energy) * 0.3) + (acousticness * 0.2)
-    scores['energetic'] = (energy * 0.4) + (tempo / 200 * 0.3) + (danceability * 0.3)
-    scores['calm'] = ((1 - energy) * 0.4) + (acousticness * 0.3) + ((1 - speechiness) * 0.2)
-    scores['tense'] = ((1 - danceability) * 0.3) + ((1 - valence) * 0.3) + (energy * 0.3)
-    scores['romantic'] = (valence * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.2)
-    scores['nostalgic'] = (acousticness * 0.5) + ((1 - energy) * 0.3) + (valence * 0.2)
-    scores['confident'] = (energy * 0.4) + (valence * 0.3) + (danceability * 0.3)
-    scores['melancholic'] = (acousticness * 0.3) + ((1 - valence) * 0.4) + ((1 - energy) * 0.3)
-    scores['euphoric'] = (energy * 0.35) + (valence * 0.35) + (danceability * 0.3)
-    scores['bored'] = ((1 - energy) * 0.4) + ((1 - valence) * 0.3) + ((1 - danceability) * 0.3)
-    scores['aggressive'] = (energy * 0.4) + (speechiness * 0.3) + ((1 - acousticness) * 0.3)
-    scores['dreamy'] = (acousticness * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.3)
-    scores['mysterious'] = (acousticness * 0.4) + ((1 - speechiness) * 0.3) + ((1 - valence) * 0.2)
-    scores['playful'] = (danceability * 0.4) + (valence * 0.3) + (energy * 0.3)
 
     # Escalar a porcentaje
     for mood in scores:
         scores[mood] = min(scores[mood] * 100, 100)
 
-    return scores
+    # Retornar la emoción dominante
+    dominant_mood = max(scores, key=scores.get)
+    return dominant_mood, scores
 
 def get_genres_from_artists(sp, artist_ids):
     genres = []
