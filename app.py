@@ -1,6 +1,7 @@
 import os
 import logging
 import requests
+import random
 from flask import Flask, render_template, request, redirect, session, url_for
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -131,12 +132,22 @@ def get_movie_recommendations(genres):
         if not genre_id:
             continue
             
-        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1&vote_count.gte=500"
+        # URL con filtro de votos (mínimo 300) para calidad
+        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1&vote_count.gte=300"
         
         try:
             response = requests.get(url)
             data = response.json()
-            raw_movies = data.get('results', [])[:5] 
+            
+            # --- EL TRUCO DE MAGIA AQUÍ ---
+            # 1. Obtenemos las 20 películas de la página
+            raw_movies = data.get('results', [])
+            
+            # 2. Las barajamos aleatoriamente
+            random.shuffle(raw_movies)
+            
+            # 3. AHORA tomamos las 5 primeras de esa lista mezclada
+            raw_movies = raw_movies[:5] 
             
             processed_movies = []
             
@@ -150,8 +161,7 @@ def get_movie_recommendations(genres):
                 else:
                     m['image'] = None
 
-                # --- RATING (La corrección nueva) ---
-                # Tomamos 'vote_average' y creamos 'rating' redondeado a 1 decimal
+                # --- RATING ---
                 val = m.get('vote_average', 0)
                 m['rating'] = round(val, 1)
 
@@ -174,7 +184,6 @@ def get_movie_recommendations(genres):
                     top_cast = [actor['name'] for actor in cast[:5]]
                     cast_string = ", ".join(top_cast) if top_cast else "No disponible"
 
-                    # Lógica de premios basada en el rating que acabamos de guardar
                     rating_val = m['rating']
                     awards_text = ""
                     if rating_val >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
