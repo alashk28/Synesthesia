@@ -312,7 +312,7 @@ def callback():
     
     try:
         logger.info("Iniciando proceso de autenticación...")
-        token_info = sp_oauth.get_access_token(code)
+        token_info = sp_oauth.get_access_token(code, as_dict=True)
         # No necesitamos extraer el token manualmente, spotipy lo maneja con el cache_handler
         
         sp = spotipy.Spotify(auth_manager=sp_oauth)
