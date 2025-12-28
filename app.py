@@ -178,26 +178,27 @@ def classify_mood(acousticness, danceability, energy, speechiness, valence, temp
         'euphoric': 0, 'bored': 0, 'aggressive': 0, 'dreamy': 0,
         'mysterious': 0, 'playful': 0
     }
-    
+
     scores['happy'] = (valence * 0.4) + (energy * 0.3) + (danceability * 0.3)
     scores['sad'] = ((1 - valence) * 0.4) + ((1 - energy) * 0.3) + (acousticness * 0.2)
-    scores['energic'] = (energy * 0.4) + (tempo / 200 * 0.3) + (danceability * 0.3)
+    scores['energetic'] = (energy * 0.4) + (tempo / 200 * 0.3) + (danceability * 0.3)
     scores['calm'] = ((1 - energy) * 0.4) + (acousticness * 0.3) + ((1 - speechiness) * 0.2)
     scores['tense'] = ((1 - danceability) * 0.3) + ((1 - valence) * 0.3) + (energy * 0.3)
     scores['romantic'] = (valence * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.2)
     scores['nostalgic'] = (acousticness * 0.5) + ((1 - energy) * 0.3) + (valence * 0.2)
-    scores['confidence'] = (energy * 0.4) + (valence * 0.3) + (danceability * 0.3)
-    scores['melancolic'] = (acousticness * 0.3) + ((1 - valence) * 0.4) + ((1 - energy) * 0.3)
+    scores['confident'] = (energy * 0.4) + (valence * 0.3) + (danceability * 0.3)
+    scores['melancholic'] = (acousticness * 0.3) + ((1 - valence) * 0.4) + ((1 - energy) * 0.3)
     scores['euphoric'] = (energy * 0.35) + (valence * 0.35) + (danceability * 0.3)
     scores['bored'] = ((1 - energy) * 0.4) + ((1 - valence) * 0.3) + ((1 - danceability) * 0.3)
-    scores['agressive'] = (energy * 0.4) + (speechiness * 0.3) + ((1 - acousticness) * 0.3)
+    scores['aggressive'] = (energy * 0.4) + (speechiness * 0.3) + ((1 - acousticness) * 0.3)
     scores['dreamy'] = (acousticness * 0.4) + ((1 - energy) * 0.3) + ((1 - danceability) * 0.3)
     scores['mysterious'] = (acousticness * 0.4) + ((1 - speechiness) * 0.3) + ((1 - valence) * 0.2)
     scores['playful'] = (danceability * 0.4) + (valence * 0.3) + (energy * 0.3)
-    
+
+    # Escalar a porcentaje
     for mood in scores:
         scores[mood] = min(scores[mood] * 100, 100)
-    
+
     return scores
 
 def get_genres_from_artists(sp, artist_ids):
