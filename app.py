@@ -226,23 +226,25 @@ def get_movie_recommendations(top_genres, max_movies=5):
     recommendations = {}
 
     for genre in top_genres:
-        genre_lower = genre.lower()
+        mapped_genre = GENRE_MAP.get(genre.lower())
 
-        # Normalizar usando el mapa
-        normalized_genre = GENRE_MAP.get(genre_lower, genre_lower)
+        # 🎯 Si el género existe y hay películas en la DB
+        if mapped_genre and mapped_genre in MOVIE_DATABASE:
+            
+            # ✅ Evita duplicados (Pop, Latin Pop, etc.)
+            if mapped_genre not in recommendations:
+                recommendations[mapped_genre] = MOVIE_DATABASE[mapped_genre][:max_movies]
+        
+        else:
+            # 🧪 DEBUG: saber qué géneros no tienen películas
+            logger.warning(f"Género sin películas: '{genre}' → '{mapped_genre}'")
 
-        # Si no existe en la DB, usar indie como fallback
-        if normalized_genre not in MOVIE_DATABASE:
-            normalized_genre = "indie"
-
-        movies = MOVIE_DATABASE.get(normalized_genre, [])
-
-        # Asegurar que SIEMPRE haya algo
-        if movies:
-            recommendations[genre] = movies[:max_movies]
+    # 🔴 FALLBACK GLOBAL (evita pantalla vacía)
+    if not recommendations:
+        logger.warning("No se encontraron recomendaciones. Usando fallback Pop.")
+        recommendations["Pop"] = MOVIE_DATABASE.get("Pop", [])[:max_movies]
 
     return recommendations
-
 
 from spotipy.exceptions import SpotifyException
 
