@@ -128,25 +128,30 @@ def get_movie_recommendations(genres):
         return {}
 
     for genre in genres:
-        genre_id = GENRE_MAPPING.get(genre)
-        if not genre_id:
+        raw_genre_id = GENRE_MAPPING.get(genre)
+        if not raw_genre_id:
             continue
             
-        # URL con filtro de votos (mínimo 300) para calidad
-        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1&vote_count.gte=300"
+        # --- EL ARREGLO CLAVE AQUÍ ---
+        # Cambiamos las comas por barras (OR) para ampliar la búsqueda.
+        # Antes: "10402,12,28" (Debe tener TODOS) -> Pocos resultados
+        # Ahora: "10402|12|28" (Puede tener CUALQUIERA) -> Muchos resultados
+        genre_id_query = raw_genre_id.replace(',', '|')
+        
+        # Usamos genre_id_query en la URL en vez de raw_genre_id
+        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id_query}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1&vote_count.gte=300"
         
         try:
             response = requests.get(url)
             data = response.json()
             
-            # --- EL TRUCO DE MAGIA AQUÍ ---
-            # 1. Obtenemos las 20 películas de la página
+            # 1. Obtenemos las 20 películas
             raw_movies = data.get('results', [])
             
-            # 2. Las barajamos aleatoriamente
+            # 2. Las barajamos
             random.shuffle(raw_movies)
             
-            # 3. AHORA tomamos las 5 primeras de esa lista mezclada
+            # 3. Tomamos 5
             raw_movies = raw_movies[:5] 
             
             processed_movies = []
@@ -154,18 +159,15 @@ def get_movie_recommendations(genres):
             for m in raw_movies:
                 movie_id = m['id']
                 
-                # --- IMAGEN ---
                 poster_path = m.get('poster_path')
                 if poster_path:
                     m['image'] = f"https://image.tmdb.org/t/p/w500{poster_path}"
                 else:
                     m['image'] = None
 
-                # --- RATING ---
                 val = m.get('vote_average', 0)
                 m['rating'] = round(val, 1)
 
-                # --- DETALLES EXTRA ---
                 details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key_to_use}&language=es-ES&append_to_response=credits"
                 details_resp = requests.get(details_url)
                 
