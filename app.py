@@ -131,7 +131,7 @@ def get_movie_recommendations(genres):
         if not genre_id:
             continue
             
-        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
+        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1&vote_count.gte=500"
         
         try:
             response = requests.get(url)
