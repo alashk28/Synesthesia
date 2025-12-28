@@ -117,11 +117,15 @@ def get_movies_from_tmdb(genre_name):
         logger.error(f"Error TMDB: {e}")
         return []
 
-def get_movie_recommendations(genres, tmdb_api_key):
+def get_movie_recommendations(genres):
+    # NOTA: Aquí usamos la variable global TMDB_API_KEY que tienes al inicio del archivo.
+    # Si tu variable se llama diferente (ej: tmdb_api_key en minúsculas), cambia la siguiente línea:
+    api_key_to_use = TMDB_API_KEY 
+    
     if not genres:
         return []
 
-    # 1. Obtenemos los IDs de género del mapeo
+    # 1. Mapeo de géneros
     genre_ids = []
     for g in genres:
         mapped = GENRE_MAPPING.get(g, "10402,35") 
@@ -129,26 +133,23 @@ def get_movie_recommendations(genres, tmdb_api_key):
     
     genre_query = ",".join(genre_ids)
     
-    # 2. Buscamos las películas (Discovery)
-    # NOTA: Quitamos cualquier límite. TMDB devuelve 20 por página por defecto.
-    # Procesaremos TODAS las que lleguen.
-    url = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_api_key}&with_genres={genre_query}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
+    # 2. Búsqueda (Discovery)
+    # Usamos api_key_to_use en lugar del argumento
+    url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_query}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
     
     try:
         response = requests.get(url)
         data = response.json()
-        
-        # ¡SIN LÍMITES! Usamos la lista completa de resultados (raw_movies)
         raw_movies = data.get('results', []) 
         
         final_movies = []
         
-        # 3. ENRIQUECIMIENTO DETALLADO (Puede tardar un poco, pero vale la pena)
+        # 3. Enriquecimiento de datos
         for m in raw_movies:
             movie_id = m['id']
             
-            # Llamada extra para detalles profundos (Créditos)
-            details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_api_key}&language=es-ES&append_to_response=credits"
+            # Llamada extra para detalles
+            details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key_to_use}&language=es-ES&append_to_response=credits"
             details_resp = requests.get(details_url)
             
             if details_resp.status_code == 200:
@@ -164,11 +165,11 @@ def get_movie_recommendations(genres, tmdb_api_key):
                         director_name = person['name']
                         break 
                 
-                # --- REPARTO (Aumentamos a 5 actores para más detalle) ---
+                # --- REPARTO ---
                 top_cast = [actor['name'] for actor in cast[:5]]
                 cast_string = ", ".join(top_cast) if top_cast else "No disponible"
 
-                # --- PREMIOS (Simulación basada en Rating) ---
+                # --- PREMIOS (Simulado) ---
                 rating = m.get('vote_average', 0)
                 awards_text = ""
                 if rating >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
@@ -176,19 +177,16 @@ def get_movie_recommendations(genres, tmdb_api_key):
                 elif rating >= 6.0: awards_text = "🔥 Éxito en Taquilla"
                 else: awards_text = "🎬 Película Recomendada"
                 
-                # --- DESCRIPCIÓN (SINOPSIS) ---
-                # Nos aseguramos de tener un texto limpio
+                # --- SINOPSIS ---
                 overview = m.get('overview', '')
                 if not overview: 
                     overview = "No hay descripción disponible para este título."
 
-                # --- GUARDAR DATOS FINALES ---
                 m['director_name'] = director_name
                 m['cast_list'] = cast_string
                 m['awards_info'] = awards_text
-                m['overview_text'] = overview # <--- Variable explicita para la descripción
+                m['overview_text'] = overview
                 
-                # Año
                 release_date = m.get('release_date', '')
                 m['year'] = release_date.split('-')[0] if release_date else 'N/A'
                 
