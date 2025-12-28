@@ -174,6 +174,11 @@ def get_audio_analysis(sp):
             est['valence'] = max(0.2, est['valence'] - 0.3)
             est['acousticness'] = min(0.9, est['acousticness'] + 0.2)
 
+        # Aseguramos límites y REDONDEAMOS para evitar el 0.7000000001
+        for key in est:
+            val = max(0.1, min(0.95, est[key]))
+            est[key] = round(val, 2)
+
         # 4. Formateamos para devolver
         simulated_scores = {
             'Positividad': int(est['valence'] * 100),
