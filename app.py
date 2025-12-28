@@ -386,15 +386,12 @@ def callback():
         else:
             movie_recommendations = []
         
-        audio_analysis = {
-            'acousticness': f"{averages.get('acousticness', 0) * 100:.1f}%",
-            'danceability': f"{averages.get('danceability', 0) * 100:.1f}%",
-            'energy': f"{averages.get('energy', 0) * 100:.1f}%",
-            'speechiness': f"{averages.get('speechiness', 0) * 100:.1f}%",
-            'valence': f"{averages.get('valence', 0) * 100:.1f}%",
-            'tempo': f"{averages.get('tempo', 0):.0f} BPM",
-            'instrumentalness': f"{averages.get('instrumentalness', 0) * 100:.1f}%"
-        }
+        audio_analysis = {}
+        for feature, value in averages.items():
+            if feature == 'tempo':
+                audio_analysis[feature] = f"{value:.0f} BPM"
+            else:
+                audio_analysis[feature] = f"{value * 100:.1f}%"
         
         return render_template('index.html',
                               logged_in=True,
