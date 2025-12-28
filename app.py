@@ -117,13 +117,88 @@ def get_movies_from_tmdb(genre_name):
         logger.error(f"Error TMDB: {e}")
         return []
 
-def get_movie_recommendations(user_genres):
-    recommendations = {}
-    for genre in user_genres:
-        movies = get_movies_from_tmdb(genre)
-        if movies:
-            recommendations[genre] = movies
-    return recommendations
+def get_movie_recommendations(genres, tmdb_api_key):
+    if not genres:
+        return []
+
+    # 1. Obtenemos los IDs de género del mapeo
+    genre_ids = []
+    for g in genres:
+        mapped = GENRE_MAPPING.get(g, "10402,35") 
+        genre_ids.append(mapped)
+    
+    genre_query = ",".join(genre_ids)
+    
+    # 2. Buscamos las películas (Discovery)
+    # NOTA: Quitamos cualquier límite. TMDB devuelve 20 por página por defecto.
+    # Procesaremos TODAS las que lleguen.
+    url = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_api_key}&with_genres={genre_query}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
+    
+    try:
+        response = requests.get(url)
+        data = response.json()
+        
+        # ¡SIN LÍMITES! Usamos la lista completa de resultados (raw_movies)
+        raw_movies = data.get('results', []) 
+        
+        final_movies = []
+        
+        # 3. ENRIQUECIMIENTO DETALLADO (Puede tardar un poco, pero vale la pena)
+        for m in raw_movies:
+            movie_id = m['id']
+            
+            # Llamada extra para detalles profundos (Créditos)
+            details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_api_key}&language=es-ES&append_to_response=credits"
+            details_resp = requests.get(details_url)
+            
+            if details_resp.status_code == 200:
+                details = details_resp.json()
+                credits = details.get('credits', {})
+                crew = credits.get('crew', [])
+                cast = credits.get('cast', [])
+                
+                # --- DIRECTOR ---
+                director_name = "Desconocido"
+                for person in crew:
+                    if person['job'] == 'Director':
+                        director_name = person['name']
+                        break 
+                
+                # --- REPARTO (Aumentamos a 5 actores para más detalle) ---
+                top_cast = [actor['name'] for actor in cast[:5]]
+                cast_string = ", ".join(top_cast) if top_cast else "No disponible"
+
+                # --- PREMIOS (Simulación basada en Rating) ---
+                rating = m.get('vote_average', 0)
+                awards_text = ""
+                if rating >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
+                elif rating >= 7.5: awards_text = "⭐ Aclamada por el Público"
+                elif rating >= 6.0: awards_text = "🔥 Éxito en Taquilla"
+                else: awards_text = "🎬 Película Recomendada"
+                
+                # --- DESCRIPCIÓN (SINOPSIS) ---
+                # Nos aseguramos de tener un texto limpio
+                overview = m.get('overview', '')
+                if not overview: 
+                    overview = "No hay descripción disponible para este título."
+
+                # --- GUARDAR DATOS FINALES ---
+                m['director_name'] = director_name
+                m['cast_list'] = cast_string
+                m['awards_info'] = awards_text
+                m['overview_text'] = overview # <--- Variable explicita para la descripción
+                
+                # Año
+                release_date = m.get('release_date', '')
+                m['year'] = release_date.split('-')[0] if release_date else 'N/A'
+                
+                final_movies.append(m)
+                
+        return final_movies
+
+    except Exception as e:
+        print(f"Error buscando películas: {e}")
+        return []
 
 def get_top_genres(sp):
     try:

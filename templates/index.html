@@ -77,7 +77,8 @@
                     <span id="modalGenre" class="bg-pink-500/20 text-pink-300 px-3 py-1 rounded-full text-sm capitalize"></span>
                     <span id="modalRating" class="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-sm"></span>
                 </div>
-                <p id="modalFullDesc" class="text-gray-300 mb-6 leading-relaxed"></p>
+                
+                <p id="modalFullDesc" class="text-gray-300 mb-6 leading-relaxed" style="text-align: justify;"></p>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div class="bg-white/5 rounded-lg p-4">
@@ -85,7 +86,7 @@
                         <p id="modalDirector" class="text-white"></p>
                     </div>
                     <div class="bg-white/5 rounded-lg p-4">
-                        <h4 class="text-yellow-400 font-semibold mb-2">🏆 Premios</h4>
+                        <h4 class="text-yellow-400 font-semibold mb-2">🏆 Premios / Info</h4>
                         <p id="modalAwards" class="text-white"></p>
                     </div>
                 </div>
@@ -217,7 +218,17 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     {% for movie in movies %}
                     <div class="card-glass rounded-xl overflow-hidden movie-card" 
-                         onclick="openModal('{{ movie.image }}', '{{ movie.title|replace('\'', '\\\'') }}', '{{ movie.year }}', '{{ movie.genre }}', '{{ movie.rating }}', '{{ movie.full_synopsis|replace('\'', '\\\'') }}', '{{ movie.director|replace('\'', '\\\'') }}', '{{ movie.awards|replace('\'', '\\\'') }}', '{{ movie.cast|join(', ')|replace('\'', '\\\'') }}')">
+                         onclick="openModal(
+                            '{{ movie.image }}', 
+                            '{{ movie.title|replace('\'', '\\\'') }}', 
+                            '{{ movie.year }}', 
+                            '{{ movie.genre }}', 
+                            '{{ movie.rating }}', 
+                            '{{ movie.overview_text|replace('\'', '\\\'')|replace('\n', ' ') }}', 
+                            '{{ movie.director_name|replace('\'', '\\\'') }}', 
+                            '{{ movie.awards_info|replace('\'', '\\\'') }}', 
+                            '{{ movie.cast_list|replace('\'', '\\\'') }}'
+                        )">
                         <div class="aspect-[2/3] relative overflow-hidden">
                             <img src="{{ movie.image if movie.image else 'https://via.placeholder.com/300x450/1a1a2e/ffffff?text=' + movie.title|replace(' ', '+') }}" 
                                  alt="{{ movie.title }}" 
@@ -227,7 +238,7 @@
                         <div class="p-4">
                             <h4 class="font-bold text-lg mb-1 truncate">{{ movie.title }}</h4>
                             <p class="text-sm text-gray-400 mb-2">{{ movie.year }}</p>
-                            <p class="text-sm text-gray-300 line-clamp-2">{{ movie.short_desc }}</p>
+                            <p class="text-sm text-gray-300 line-clamp-2">{{ movie.overview_text }}</p>
                             <div class="mt-2 flex items-center gap-2">
                                 <span class="text-yellow-400">⭐</span>
                                 <span class="text-sm text-gray-300">{{ movie.rating }}</span>
@@ -259,6 +270,8 @@
             document.getElementById('modalYear').textContent = year;
             document.getElementById('modalGenre').textContent = genre;
             document.getElementById('modalRating').textContent = '⭐ ' + rating + '/10';
+            
+            // Aquí cargamos los datos que antes no se veían
             document.getElementById('modalFullDesc').textContent = fullDesc;
             document.getElementById('modalDirector').textContent = director;
             document.getElementById('modalAwards').textContent = awards;
@@ -271,7 +284,7 @@
         function closeModal() {
             document.getElementById('movieModal').style.display = 'none';
             document.body.style.overflow = 'auto';
-            // Limpiar src al cerrar para evitar descargas innecesarias
+            // Limpiar src al cerrar
             document.getElementById('modalImage').src = "https://via.placeholder.com/800x400/1a1a2e/ffffff?text=Cargando...";
         }
         
