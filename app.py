@@ -121,33 +121,41 @@ def get_movie_recommendations(genres):
     # Usamos la clave global
     api_key_to_use = TMDB_API_KEY 
     
-    recommendations = {} # <--- Ahora creamos un Diccionario, no una lista
+    recommendations = {} 
     
     if not genres:
         return {}
 
-    # Recorremos CADA género que le guste al usuario
     for genre in genres:
-        # 1. Obtener ID del género
         genre_id = GENRE_MAPPING.get(genre)
         if not genre_id:
             continue
             
-        # 2. Buscar películas SOLO de este género
         url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
         
         try:
             response = requests.get(url)
             data = response.json()
-            raw_movies = data.get('results', [])[:5] # Limitamos a 5 por género para que no sea eterno cargar
+            raw_movies = data.get('results', [])[:5] 
             
             processed_movies = []
             
-            # 3. Enriquecer cada película
             for m in raw_movies:
                 movie_id = m['id']
                 
-                # Llamada extra para detalles (Director, Reparto, etc.)
+                # --- IMAGEN ---
+                poster_path = m.get('poster_path')
+                if poster_path:
+                    m['image'] = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                else:
+                    m['image'] = None
+
+                # --- RATING (La corrección nueva) ---
+                # Tomamos 'vote_average' y creamos 'rating' redondeado a 1 decimal
+                val = m.get('vote_average', 0)
+                m['rating'] = round(val, 1)
+
+                # --- DETALLES EXTRA ---
                 details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key_to_use}&language=es-ES&append_to_response=credits"
                 details_resp = requests.get(details_url)
                 
@@ -157,31 +165,27 @@ def get_movie_recommendations(genres):
                     crew = credits.get('crew', [])
                     cast = credits.get('cast', [])
                     
-                    # --- DIRECTOR ---
                     director_name = "Desconocido"
                     for person in crew:
                         if person['job'] == 'Director':
                             director_name = person['name']
                             break 
                     
-                    # --- REPARTO ---
                     top_cast = [actor['name'] for actor in cast[:5]]
                     cast_string = ", ".join(top_cast) if top_cast else "No disponible"
 
-                    # --- PREMIOS (Simulado) ---
-                    rating = m.get('vote_average', 0)
+                    # Lógica de premios basada en el rating que acabamos de guardar
+                    rating_val = m['rating']
                     awards_text = ""
-                    if rating >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
-                    elif rating >= 7.5: awards_text = "⭐ Aclamada por el Público"
-                    elif rating >= 6.0: awards_text = "🔥 Éxito en Taquilla"
+                    if rating_val >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
+                    elif rating_val >= 7.5: awards_text = "⭐ Aclamada por el Público"
+                    elif rating_val >= 6.0: awards_text = "🔥 Éxito en Taquilla"
                     else: awards_text = "🎬 Película Recomendada"
                     
-                    # --- SINOPSIS ---
                     overview = m.get('overview', '')
                     if not overview: 
                         overview = "No hay descripción disponible para este título."
 
-                    # Guardamos los datos nuevos
                     m['director_name'] = director_name
                     m['cast_list'] = cast_string
                     m['awards_info'] = awards_text
@@ -192,7 +196,6 @@ def get_movie_recommendations(genres):
                     
                     processed_movies.append(m)
             
-            # Guardamos la lista de películas DENTRO de la llave del género
             if processed_movies:
                 recommendations[genre] = processed_movies
 
