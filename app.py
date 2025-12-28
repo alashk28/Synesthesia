@@ -118,85 +118,89 @@ def get_movies_from_tmdb(genre_name):
         return []
 
 def get_movie_recommendations(genres):
-    # NOTA: Aquí usamos la variable global TMDB_API_KEY que tienes al inicio del archivo.
-    # Si tu variable se llama diferente (ej: tmdb_api_key en minúsculas), cambia la siguiente línea:
+    # Usamos la clave global
     api_key_to_use = TMDB_API_KEY 
     
+    recommendations = {} # <--- Ahora creamos un Diccionario, no una lista
+    
     if not genres:
-        return []
+        return {}
 
-    # 1. Mapeo de géneros
-    genre_ids = []
-    for g in genres:
-        mapped = GENRE_MAPPING.get(g, "10402,35") 
-        genre_ids.append(mapped)
-    
-    genre_query = ",".join(genre_ids)
-    
-    # 2. Búsqueda (Discovery)
-    # Usamos api_key_to_use en lugar del argumento
-    url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_query}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
-    
-    try:
-        response = requests.get(url)
-        data = response.json()
-        raw_movies = data.get('results', []) 
-        
-        final_movies = []
-        
-        # 3. Enriquecimiento de datos
-        for m in raw_movies:
-            movie_id = m['id']
+    # Recorremos CADA género que le guste al usuario
+    for genre in genres:
+        # 1. Obtener ID del género
+        genre_id = GENRE_MAPPING.get(genre)
+        if not genre_id:
+            continue
             
-            # Llamada extra para detalles
-            details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key_to_use}&language=es-ES&append_to_response=credits"
-            details_resp = requests.get(details_url)
+        # 2. Buscar películas SOLO de este género
+        url = f"https://api.themoviedb.org/3/discover/movie?api_key={api_key_to_use}&with_genres={genre_id}&language=es-ES&sort_by=popularity.desc&include_adult=false&page=1"
+        
+        try:
+            response = requests.get(url)
+            data = response.json()
+            raw_movies = data.get('results', [])[:5] # Limitamos a 5 por género para que no sea eterno cargar
             
-            if details_resp.status_code == 200:
-                details = details_resp.json()
-                credits = details.get('credits', {})
-                crew = credits.get('crew', [])
-                cast = credits.get('cast', [])
+            processed_movies = []
+            
+            # 3. Enriquecer cada película
+            for m in raw_movies:
+                movie_id = m['id']
                 
-                # --- DIRECTOR ---
-                director_name = "Desconocido"
-                for person in crew:
-                    if person['job'] == 'Director':
-                        director_name = person['name']
-                        break 
+                # Llamada extra para detalles (Director, Reparto, etc.)
+                details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key_to_use}&language=es-ES&append_to_response=credits"
+                details_resp = requests.get(details_url)
                 
-                # --- REPARTO ---
-                top_cast = [actor['name'] for actor in cast[:5]]
-                cast_string = ", ".join(top_cast) if top_cast else "No disponible"
+                if details_resp.status_code == 200:
+                    details = details_resp.json()
+                    credits = details.get('credits', {})
+                    crew = credits.get('crew', [])
+                    cast = credits.get('cast', [])
+                    
+                    # --- DIRECTOR ---
+                    director_name = "Desconocido"
+                    for person in crew:
+                        if person['job'] == 'Director':
+                            director_name = person['name']
+                            break 
+                    
+                    # --- REPARTO ---
+                    top_cast = [actor['name'] for actor in cast[:5]]
+                    cast_string = ", ".join(top_cast) if top_cast else "No disponible"
 
-                # --- PREMIOS (Simulado) ---
-                rating = m.get('vote_average', 0)
-                awards_text = ""
-                if rating >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
-                elif rating >= 7.5: awards_text = "⭐ Aclamada por el Público"
-                elif rating >= 6.0: awards_text = "🔥 Éxito en Taquilla"
-                else: awards_text = "🎬 Película Recomendada"
-                
-                # --- SINOPSIS ---
-                overview = m.get('overview', '')
-                if not overview: 
-                    overview = "No hay descripción disponible para este título."
+                    # --- PREMIOS (Simulado) ---
+                    rating = m.get('vote_average', 0)
+                    awards_text = ""
+                    if rating >= 8.5: awards_text = "🏆 Obra Maestra de la Crítica"
+                    elif rating >= 7.5: awards_text = "⭐ Aclamada por el Público"
+                    elif rating >= 6.0: awards_text = "🔥 Éxito en Taquilla"
+                    else: awards_text = "🎬 Película Recomendada"
+                    
+                    # --- SINOPSIS ---
+                    overview = m.get('overview', '')
+                    if not overview: 
+                        overview = "No hay descripción disponible para este título."
 
-                m['director_name'] = director_name
-                m['cast_list'] = cast_string
-                m['awards_info'] = awards_text
-                m['overview_text'] = overview
-                
-                release_date = m.get('release_date', '')
-                m['year'] = release_date.split('-')[0] if release_date else 'N/A'
-                
-                final_movies.append(m)
-                
-        return final_movies
+                    # Guardamos los datos nuevos
+                    m['director_name'] = director_name
+                    m['cast_list'] = cast_string
+                    m['awards_info'] = awards_text
+                    m['overview_text'] = overview
+                    
+                    release_date = m.get('release_date', '')
+                    m['year'] = release_date.split('-')[0] if release_date else 'N/A'
+                    
+                    processed_movies.append(m)
+            
+            # Guardamos la lista de películas DENTRO de la llave del género
+            if processed_movies:
+                recommendations[genre] = processed_movies
 
-    except Exception as e:
-        print(f"Error buscando películas: {e}")
-        return []
+        except Exception as e:
+            print(f"Error buscando películas para {genre}: {e}")
+            continue
+
+    return recommendations
 
 def get_top_genres(sp):
     try:
