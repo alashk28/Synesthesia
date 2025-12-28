@@ -354,9 +354,9 @@ def callback():
             valid_tracks = 0
             
             for af in audio_features:
-                if af:
+                 if af:
                     for feature in feature_sums:
-                        feature_sums[feature] += af[feature]
+                        feature_sums[feature] += af.get(feature, 0)  # usar .get para evitar KeyError
                     valid_tracks += 1
             
             if valid_tracks > 0:
