@@ -8,66 +8,88 @@ from spotipy.cache_handler import FlaskSessionCacheHandler
 from collections import Counter
 from dotenv import load_dotenv
 
-# --- CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN INICIAL ---
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- CREDENCIALES ---
+# --- 2. CREDENCIALES (Cargadas desde Render) ---
 SPOTIPY_CLIENT_ID = os.getenv('SPOTIPY_CLIENT_ID')
 SPOTIPY_CLIENT_SECRET = os.getenv('SPOTIPY_CLIENT_SECRET')
 SPOTIPY_REDIRECT_URI = os.getenv('SPOTIPY_REDIRECT_URI')
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
-# Verificación de seguridad
+# Verificamos que todo exista antes de arrancar
 if not all([SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI, TMDB_API_KEY]):
-    raise ValueError("FALTAN VARIABLES EN EL ENV DE RENDER")
+    logger.error("FALTAN VARIABLES DE ENTORNO. REVISA EL DASHBOARD DE RENDER.")
+    # No lanzamos error fatal aquí para permitir que la app arranque y muestre el error en logs
+    
+# Clave para mantener la sesión abierta (Cookies)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'clave_super_secreta_fija_para_evitar_logout')
 
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'clave_default_insegura')
-
-# --- TRADUCTOR (SPOTIFY -> CINE) ---
+# --- 3. DICCIONARIO DE GÉNEROS ---
 GENRE_MAPPING = {
-    "Pop": "10402,35,10749", "Rock": "10402,18,99", "Hip Hop": "10402,80,18",
-    "Hip-Hop": "10402,80,18", "Electronic": "878,53,28", "Dance": "10402,35",
-    "Indie": "18,35,10749", "Metal": "27,28,53", "R&B": "10402,10749,18",
-    "Reggaeton": "10402,28,35", "Jazz": "10402,18,36", "Classical": "36,18"
+    "Pop": "10402,35,10749",       # Música -> Comedia, Romance
+    "Rock": "10402,18,99",         # Música -> Drama, Documental
+    "Hip Hop": "10402,80,18",      # Música -> Crimen, Drama
+    "Hip-Hop": "10402,80,18",
+    "Electronic": "878,53,28",     # Sci-Fi, Thriller, Acción
+    "Dance": "10402,35",
+    "Indie": "18,35,10749",
+    "Metal": "27,28,53",           # Terror, Acción, Thriller
+    "R&B": "10402,10749,18",
+    "Reggaeton": "10402,28,35",
+    "Jazz": "10402,18,36",         # Música, Drama, Historia
+    "Classical": "36,18"           # Historia, Drama
 }
 
-# --- FUNCIONES ---
+# --- 4. FUNCIONES ---
 
 def get_movies_from_tmdb(genre_name):
-    """Busca películas en TMDB (Internet)"""
+    """Conecta con TMDB para buscar películas por género"""
     try:
-        tmdb_genre_ids = GENRE_MAPPING.get(genre_name, "10402")
+        # Traducimos género de música a IDs de cine
+        tmdb_genre_ids = GENRE_MAPPING.get(genre_name, "10402") # 10402 es 'Música' por defecto
+        
         url = "https://api.themoviedb.org/3/discover/movie"
         params = {
-            "api_key": TMDB_API_KEY, "language": "es-ES",
-            "sort_by": "popularity.desc", "with_genres": tmdb_genre_ids,
-            "vote_count.gte": 200
+            "api_key": TMDB_API_KEY,
+            "language": "es-ES",
+            "sort_by": "popularity.desc",
+            "with_genres": tmdb_genre_ids,
+            "vote_count.gte": 200,
+            "include_adult": "false"
         }
-        # Timeout de 3 seg para que no se congele
-        response = requests.get(url, params=params, timeout=3)
+        
+        # Timeout de 5 segundos para no bloquear la app
+        response = requests.get(url, params=params, timeout=5)
         data = response.json()
+        
         movies = []
         if "results" in data:
-            for item in data["results"][:6]:
-                poster = item.get("poster_path")
-                img = f"https://image.tmdb.org/t/p/w500{poster}" if poster else "https://via.placeholder.com/500"
+            for item in data["results"][:6]: # Solo las 6 primeras
+                poster_path = item.get("poster_path")
+                # Construimos la URL de la imagen
+                if poster_path:
+                    full_image_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+                else:
+                    full_image_url = "https://via.placeholder.com/500x750?text=No+Image"
+                
                 movies.append({
-                    "title": item.get("title"), 
-                    "year": item.get("release_date", "")[:4],
-                    "image": img, 
+                    "title": item.get("title"),
+                    "year": item.get("release_date", "N/A")[:4],
+                    "image": full_image_url,
                     "overview": item.get("overview", "")
                 })
         return movies
     except Exception as e:
-        logger.error(f"Error TMDB: {e}")
+        logger.error(f"Error conectando a TMDB: {e}")
         return []
 
 def get_movie_recommendations(user_genres):
-    """ESTA ES LA FUNCIÓN QUE FALTABA: Une géneros con películas"""
+    """Itera sobre los géneros del usuario y busca películas para cada uno"""
     recommendations = {}
     for genre in user_genres:
         movies = get_movies_from_tmdb(genre)
@@ -76,70 +98,105 @@ def get_movie_recommendations(user_genres):
     return recommendations
 
 def get_top_genres(sp):
-    """Obtiene los géneros favoritos"""
+    """Obtiene los géneros más escuchados del usuario"""
     try:
         results = sp.current_user_top_artists(limit=20, time_range='medium_term')
         artist_ids = [item['id'] for item in results['items']]
         
         cleaned_genres = []
+        # Obtenemos detalles de artistas en lotes (batch)
         if artist_ids:
-            # Pedimos detalles en lotes pequeños
-            full_artists = sp.artists(artist_ids[:20])
-            for artist in full_artists['artists']:
-                for g in artist['genres']:
-                    # Buscamos coincidencias con nuestro mapa
-                    for key in GENRE_MAPPING.keys():
-                        if key.lower() in g.lower():
-                            cleaned_genres.append(key)
-                            break
-                            
+            # Dividimos en grupos de 20 para no saturar
+            for i in range(0, len(artist_ids), 20):
+                batch = artist_ids[i:i+20]
+                artists_full = sp.artists(batch)
+                
+                for artist in artists_full['artists']:
+                    for g in artist['genres']:
+                        # Buscamos si el género está en nuestro mapa
+                        for key in GENRE_MAPPING.keys():
+                            if key.lower() in g.lower():
+                                cleaned_genres.append(key)
+                                break # Solo agregamos la primera coincidencia por género
+                                
         genre_counts = Counter(cleaned_genres)
-        top = [g for g, c in genre_counts.most_common(5)]
-        return top if top else ["Pop", "Rock"]
+        # Top 5 géneros
+        top_genres = [genre for genre, count in genre_counts.most_common(5)]
+        
+        # Si no encontramos nada, devolvemos genéricos
+        if not top_genres:
+            return ["Pop", "Rock"]
+            
+        return top_genres
     except Exception as e:
-        logger.error(f"Error Géneros: {e}")
+        logger.error(f"Error obteniendo géneros: {e}")
         return ["Pop", "Rock"]
 
 def get_audio_analysis(sp):
-    """Analiza la intensidad (Blindado contra errores)"""
+    """Obtiene datos numéricos (intensidad) de las canciones"""
     try:
-        top = sp.current_user_top_tracks(limit=10, time_range='short_term')
-        # Filtramos canciones locales (sin ID)
-        ids = [t['id'] for t in top['items'] if t.get('id')]
+        top_tracks = sp.current_user_top_tracks(limit=10, time_range='short_term')
         
-        if not ids: return {}, {}
+        # Filtramos IDs válidos
+        track_ids = [t['id'] for t in top_tracks['items'] if t and t.get('id')]
         
-        features = sp.audio_features(ids)
-        avg = {'danceability':0, 'energy':0, 'valence':0, 'acousticness':0}
-        c = 0
-        for f in features:
-            if f:
-                for k in avg: avg[k] += f[k]
-                c += 1
+        if not track_ids:
+            return {}, {}
+
+        audio_features = sp.audio_features(track_ids)
         
-        if c > 0:
-            for k in avg: avg[k] = round(avg[k]/c, 2)
-            
-        scores = {
-            'Positividad': int(avg['valence']*100),
-            'Energía': int(avg['energy']*100),
-            'Ritmo': int(avg['danceability']*100),
-            'Acústico': int(avg['acousticness']*100)
+        avg_features = {
+            'danceability': 0,
+            'energy': 0,
+            'valence': 0,
+            'acousticness': 0
         }
-        return scores, avg
+        
+        count = 0
+        for f in audio_features:
+            if f: # Verificamos que no sea None
+                avg_features['danceability'] += f['danceability']
+                avg_features['energy'] += f['energy']
+                avg_features['valence'] += f['valence']
+                avg_features['acousticness'] += f['acousticness']
+                count += 1
+        
+        if count > 0:
+            for key in avg_features:
+                avg_features[key] = round(avg_features[key] / count, 2)
+
+        mood_scores = {
+            'Positividad': int(avg_features['valence'] * 100),
+            'Energía': int(avg_features['energy'] * 100),
+            'Ritmo': int(avg_features['danceability'] * 100),
+            'Acústico': int(avg_features['acousticness'] * 100)
+        }
+        
+        return mood_scores, avg_features
+
     except Exception as e:
-        logger.error(f"Error Audio: {e}")
+        logger.error(f"Error en análisis de audio: {e}")
+        # Devolvemos vacío para no romper la app
         return {}, {}
 
-# --- RUTAS ---
+# --- 5. RUTAS DE LA APP ---
+
 @app.route('/')
 def index():
     return render_template('index.html', logged_in=False, mood_name="Login", mood_scores={}, audio_analysis={}, movie_recommendations={}, top_genres=[], user_name="")
 
 @app.route('/login')
 def login():
+    # Usamos cache handler para manejar la sesión
     handler = FlaskSessionCacheHandler(session)
-    sp_oauth = SpotifyOAuth(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET, redirect_uri=SPOTIPY_REDIRECT_URI, scope='user-top-read', cache_handler=handler, show_dialog=True)
+    sp_oauth = SpotifyOAuth(
+        client_id=SPOTIPY_CLIENT_ID, 
+        client_secret=SPOTIPY_CLIENT_SECRET, 
+        redirect_uri=SPOTIPY_REDIRECT_URI, 
+        scope='user-top-read', 
+        cache_handler=handler, 
+        show_dialog=True # Fuerza a pedir usuario/contraseña si es necesario
+    )
     return redirect(sp_oauth.get_authorize_url())
 
 @app.route('/logout')
@@ -151,37 +208,68 @@ def logout():
 def callback():
     try:
         handler = FlaskSessionCacheHandler(session)
-        sp_oauth = SpotifyOAuth(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET, redirect_uri=SPOTIPY_REDIRECT_URI, scope='user-top-read', cache_handler=handler)
+        sp_oauth = SpotifyOAuth(
+            client_id=SPOTIPY_CLIENT_ID, 
+            client_secret=SPOTIPY_CLIENT_SECRET, 
+            redirect_uri=SPOTIPY_REDIRECT_URI, 
+            scope='user-top-read', 
+            cache_handler=handler
+        )
         
         code = request.args.get('code')
-        if not code: return "Error: Sin código de Spotify"
+        if not code:
+            return "Error: No se recibió código de Spotify."
 
+        # Intercambiamos código por token
         sp_oauth.get_access_token(code)
+        
         if not sp_oauth.validate_token(handler.get_cached_token()):
-             return "Error: Token inválido"
+             return "Error: Token inválido o expirado."
 
+        # Iniciamos cliente de Spotify
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         user = sp.current_user()
         
-        # Ejecución principal
+        # --- PROCESAMIENTO DE DATOS ---
+        
+        # 1. Géneros
         top_genres = get_top_genres(sp)
-        # Aquí es donde fallaba antes, ahora ya existe la función:
+        
+        # 2. Películas (Aquí llamamos a la función que faltaba antes)
         movie_recommendations = get_movie_recommendations(top_genres)
+        
+        # 3. Audio / Intensidad
         mood_scores, audio_analysis = get_audio_analysis(sp)
         
+        # 4. Nombre del Mood
         mood_name = "Oyente Equilibrado"
-        if mood_scores.get('Energía', 0) > 75: mood_name = "Explosión de Energía"
+        if mood_scores.get('Energía', 0) > 75:
+            mood_name = "Explosión de Energía"
+        elif mood_scores.get('Positividad', 0) < 30:
+            mood_name = "Melancolía Profunda"
+        elif mood_scores.get('Positividad', 0) > 80:
+            mood_name = "Euforia Total"
         
-        return render_template('index.html', logged_in=True, mood_name=mood_name, mood_scores=mood_scores, audio_analysis=audio_analysis, movie_recommendations=movie_recommendations, top_genres=top_genres, user_name=user['display_name'])
+        return render_template(
+            'index.html', 
+            logged_in=True, 
+            mood_name=mood_name, 
+            mood_scores=mood_scores, 
+            audio_analysis=audio_analysis, 
+            movie_recommendations=movie_recommendations, 
+            top_genres=top_genres, 
+            user_name=user['display_name']
+        )
 
     except Exception as e:
-        logger.error(f"FATAL ERROR: {e}")
-        # Si falla, mostramos el error en pantalla para arreglarlo rápido
+        logger.error(f"ERROR CRÍTICO EN CALLBACK: {e}")
+        # Mostramos el error en pantalla para depuración
         return f"""
-        <div style="color: red; padding: 20px; border: 2px solid red;">
-            <h2>❌ Algo falló</h2>
-            <p>{e}</p>
-            <a href='/login'>Reintentar</a>
+        <div style="font-family: sans-serif; padding: 2rem; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px;">
+            <h2>❌ Algo salió mal</h2>
+            <p>Error técnico: <strong>{e}</strong></p>
+            <hr>
+            <p>Intenta hacer <a href='/logout'>Logout manual</a> y vuelve a probar.</p>
         </div>
         """
 
