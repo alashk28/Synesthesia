@@ -22,11 +22,11 @@ SPOTIPY_REDIRECT_URI = os.getenv('SPOTIPY_REDIRECT_URI')
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
 if not all([SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI, TMDB_API_KEY]):
-    raise ValueError("Faltan variables en el .env. Revisa TMDB_API_KEY.")
+    raise ValueError("Faltan variables en el .env. Revisa el archivo.")
 
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'clave_super_segura_fija')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'clave_segura_123')
 
-# --- DICCIONARIO TRADUCTOR ---
+# --- TRADUCTOR DE GÉNEROS ---
 GENRE_MAPPING = {
     "Pop": "10402,35,10749",
     "Rock": "10402,18,99",
@@ -42,7 +42,37 @@ GENRE_MAPPING = {
     "Classical": "36,18"
 }
 
-# --- FUNCIONES ---
+# --- FUNCIONES DE CINE (TMDB) ---
+def get_movies_from_tmdb(genre_name):
+    try:
+        tmdb_genre_ids = GENRE_MAPPING.get(genre_name, "10402")
+        url = "https://api.themoviedb.org/3/discover/movie"
+        params = {
+            "api_key": TMDB_API_KEY,
+            "language": "es-ES",
+            "sort_by": "popularity.desc",
+            "with_genres": tmdb_genre_ids,
+            "vote_count.gte": 200
+        }
+        response = requests.get(url, params=params)
+        data = response.json()
+        movies = []
+        if "results" in data:
+            for item in data["results"][:6]:
+                poster_path = item.get("poster_path")
+                full_image_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else "https://via.placeholder.com/500x750?text=No+Image"
+                movies.append({
+                    "title": item.get("title"),
+                    "year": item.get("release_date", "N/A")[:4],
+                    "image": full_image_url,
+                    "overview": item.get("overview", "")
+                })
+        return movies
+    except Exception as e:
+        logger.error(f"Error conectando a TMDB: {e}")
+        return []
+
+# --- FUNCIONES DE SPOTIFY (GÉNEROS) ---
 def get_genres_from_artists(sp, artist_ids):
     genres = []
     for artist_id in artist_ids:
@@ -50,12 +80,13 @@ def get_genres_from_artists(sp, artist_ids):
             artist = sp.artist(artist_id)
             genres.extend(artist['genres'])
         except Exception as e:
-            logger.warning(f"Error con artista {artist_id}: {e}")
+            logger.warning(f"Error artista {artist_id}: {e}")
     return genres
 
-def get_top_genres(sp, limit=50):
+def get_top_genres(sp):
     try:
-        results = sp.current_user_top_artists(limit=limit)
+        # Usamos Top Artists para definir los géneros
+        results = sp.current_user_top_artists(limit=50, time_range='medium_term')
         artist_ids = [item['id'] for item in results['items']]
         all_genres = get_genres_from_artists(sp, artist_ids)
         
@@ -72,46 +103,57 @@ def get_top_genres(sp, limit=50):
 
         genre_counts = Counter(cleaned_genres)
         top_genres = [genre for genre, count in genre_counts.most_common(5)]
-        
-        if not top_genres:
-            return ["Pop", "Rock", "Hip-Hop", "Electronic"]
-            
-        return top_genres
+        return top_genres if top_genres else ["Pop", "Rock"]
     except Exception as e:
-        logger.error(f"Error obteniendo géneros: {e}")
-        return ["Pop", "Rock", "Hip-Hop", "Electronic"]
+        logger.error(f"Error géneros: {e}")
+        return ["Pop"]
 
-def get_movies_from_tmdb(genre_name):
+# --- FUNCIONES DE ANÁLISIS DE AUDIO (REACTIVADO) ---
+def get_audio_analysis(sp):
+    """Analiza las canciones para sacar la intensidad y datos numéricos"""
     try:
-        tmdb_genre_ids = GENRE_MAPPING.get(genre_name, "10402")
-        url = "https://api.themoviedb.org/3/discover/movie"
-        params = {
-            "api_key": TMDB_API_KEY,
-            "language": "es-ES",
-            "sort_by": "popularity.desc",
-            "with_genres": tmdb_genre_ids,
-            "vote_count.gte": 200
+        # Usamos Top Tracks para el análisis numérico
+        top_tracks = sp.current_user_top_tracks(limit=20, time_range='short_term')
+        if not top_tracks['items']:
+            return {}, {}
+
+        track_ids = [t['id'] for t in top_tracks['items']]
+        audio_features = sp.audio_features(track_ids)
+        
+        # Calcular promedios
+        avg_features = {
+            'danceability': 0,
+            'energy': 0,
+            'valence': 0, # Felicidad/Positividad
+            'acousticness': 0
         }
         
-        response = requests.get(url, params=params)
-        data = response.json()
+        count = 0
+        for f in audio_features:
+            if f: # A veces Spotify devuelve None
+                avg_features['danceability'] += f['danceability']
+                avg_features['energy'] += f['energy']
+                avg_features['valence'] += f['valence']
+                avg_features['acousticness'] += f['acousticness']
+                count += 1
         
-        movies = []
-        if "results" in data:
-            for item in data["results"][:6]:
-                poster_path = item.get("poster_path")
-                full_image_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else "https://via.placeholder.com/500x750?text=No+Image"
-                
-                movies.append({
-                    "title": item.get("title"),
-                    "year": item.get("release_date", "N/A")[:4],
-                    "image": full_image_url,
-                    "overview": item.get("overview", "")
-                })
-        return movies
+        if count > 0:
+            for key in avg_features:
+                avg_features[key] = round(avg_features[key] / count, 2)
+
+        # Preparar datos para "Intensidad" (Mood Scores)
+        mood_scores = {
+            'Positividad': int(avg_features['valence'] * 100),
+            'Energía': int(avg_features['energy'] * 100),
+            'Ritmo': int(avg_features['danceability'] * 100),
+            'Acústico': int(avg_features['acousticness'] * 100)
+        }
+        
+        return mood_scores, avg_features
+
     except Exception as e:
-        logger.error(f"Error conectando a TMDB: {e}")
-        return []
+        logger.error(f"Error en análisis de audio: {e}")
+        return {}, {}
 
 def get_movie_recommendations(user_genres):
     recommendations = {}
@@ -124,7 +166,6 @@ def get_movie_recommendations(user_genres):
 # --- RUTAS ---
 @app.route('/')
 def index():
-    # Aquí pasamos diccionarios vacíos {} para que el HTML no falle
     return render_template('index.html', logged_in=False, mood_name="Inicia sesión", mood_scores={}, audio_analysis={}, movie_recommendations={}, top_genres=[], user_name="Usuario")
 
 @app.route('/login')
@@ -146,16 +187,30 @@ def callback():
             
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         user = sp.current_user()
+        
+        # 1. Obtener Géneros (para películas)
         top_genres = get_top_genres(sp)
+        
+        # 2. Obtener Películas (API TMDB)
         movie_recommendations = get_movie_recommendations(top_genres)
         
-        # --- AQUÍ ESTABA EL ERROR ---
-        # Antes faltaba mood_scores={} y audio_analysis={}
+        # 3. Obtener Análisis de Audio (RESTAURADO)
+        mood_scores, audio_analysis = get_audio_analysis(sp)
+        
+        # Definir un nombre de Mood basado en la energía
+        mood_name = "Oyente Equilibrado"
+        if mood_scores.get('Energía', 0) > 75:
+            mood_name = "Explosión de Energía"
+        elif mood_scores.get('Positividad', 0) < 30:
+            mood_name = "Melancolía Profunda"
+        elif mood_scores.get('Positividad', 0) > 80:
+            mood_name = "Euforia Total"
+        
         return render_template('index.html', 
                                logged_in=True, 
-                               mood_name="Cinéfilo Musical", 
-                               mood_scores={},      # <--- AÑADIDO (Vacío para evitar error)
-                               audio_analysis={},   # <--- AÑADIDO (Vacío para evitar error)
+                               mood_name=mood_name, 
+                               mood_scores=mood_scores,      # Ahora sí enviamos datos reales
+                               audio_analysis=audio_analysis, # Ahora sí enviamos datos reales
                                movie_recommendations=movie_recommendations, 
                                top_genres=top_genres, 
                                user_name=user['display_name'])
