@@ -12,12 +12,39 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GENRE_MAP = {
-    "reggaeton": "hip-hop",
-    "trap latino": "hip-hop",
-    "urbano latino": "r&b",
-    "latin": "pop",
-    "latin pop": "pop",
-    "pop": "pop"
+    # Pop / Latin
+    "pop": "Pop",
+    "latin": "Pop",
+    "latin pop": "Pop",
+    "k-pop": "K-Pop",
+
+    # Urbano
+    "reggaeton": "Reggaeton",
+    "trap latino": "Urbano Latino",
+    "urbano latino": "Urbano Latino",
+    "latin hip hop": "Hip-Hop",
+    "hip hop": "Hip-Hop",
+
+    # Rock
+    "rock": "Rock",
+    "latin rock": "Latin Rock",
+    "indie rock": "Indie Rock",
+
+    # Chill / emocional
+    "indie pop": "Indie Pop",
+    "soul": "Soul",
+    "r&b": "R&B",
+    "jazz": "Jazz",
+    "lofi": "Lo-Fi",
+
+    # Electrónica
+    "electronic": "Electronic",
+    "edm": "EDM",
+    "house": "EDM",
+    "techno": "EDM",
+
+    # Instrumental
+    "classical": "Classical"
 }
 
 app = Flask(__name__)
