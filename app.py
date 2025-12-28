@@ -330,7 +330,7 @@ def callback():
         
         audio_features = get_audio_features_safe(sp, track_ids)
         api_error = False
-        averages = {
+        DEFAULT_AUDIO_FEATURES = {
             'acousticness': 0.5,
             'danceability': 0.5,
             'energy': 0.5,
@@ -339,6 +339,12 @@ def callback():
             'tempo': 120,
             'instrumentalness': 0.1
         }
+
+        averages = DEFAULT_AUDIO_FEATURES.copy()
+
+        # Calculamos promedios solo si hay tracks válidos
+        if valid_tracks > 0:
+            averages = {feature: value / valid_tracks for feature, value in feature_sums.items()}
 
         if audio_features:
             feature_sums = {
