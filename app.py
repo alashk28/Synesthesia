@@ -381,7 +381,10 @@ def callback():
         mood_name = max(mood_scores, key=mood_scores.get)
         mood_name = mood_name.replace('_', ' ').title()
         
-        movie_recommendations = get_movie_recommendations(top_genres)
+        if top_genres:
+            movie_recommendations = get_movie_recommendations(top_genres)
+        else:
+            movie_recommendations = []
         
         audio_analysis = {
             'acousticness': f"{averages.get('acousticness', 0) * 100:.1f}%",
